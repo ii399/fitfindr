@@ -40,8 +40,7 @@
 ## What This Does
 
 <!-- Three or four sentences: what a user asks for, and what they get back. -->
-
-
+FitFindr is an AI-powered thrift shopping assistant that helps users find affordable clothing based on their style preferences, size, and budget. It searches available clothing listings, selects a matching item, and uses AI to suggest outfits combining the thrifted item with pieces from the user's existing wardrobe. It then generates a short, shareable fit card describing the outfit, including the item's price and selling platform. If no listings match the user's requirements, FitFindr provides helpful suggestions for adjusting the search instead of continuing with an unsuitable item.
 
 ---
 
@@ -114,11 +113,37 @@ selected item to `create_fit_card`.
 
 **How the query is parsed:** <!-- regex, string splitting, or asking the model — say which -->
 
+The agent uses the parse_query() function in agent.py to extract the clothing description, requested size, and maximum price from the user's natural-language query using regular expressions (regex). It first identifies and removes the price and size information, then cleans up the remaining text to obtain the clothing description.
+
+For example, "vintage graphic tee under $30, size M" becomes:
+
+```python
+{
+    "description": "vintage graphic tee",
+    "size": "M",
+    "max_price": 30.0
+}
+```
+The extracted values are passed to search_listings().
+
+Regex parsing is fast, predictable, and does not require an AI model call. However, it may not recognize unfamiliar phrasing, such as "nothing over thirty dollars", because the current patterns do not handle every possible way of expressing a budget.
+
 **What moves through the session:** <!-- which fields, in what order -->
 
+The agent starts with new_session(query, wardrobe) and stores information as each step completes:
+
+1. session["parsed"] — the extracted search criteria.
+2. session["search_results"] — the matching clothing listings.
+3. session["selected_item"] — the first matching listing.
+4. session["outfit_suggestion"] — the AI-generated outfit recommendations.
+5. session["fit_card"] — the final AI-generated caption.
+
+If no listings match, the agent sets session["error"] to a helpful message and returns immediately. The selected item, outfit suggestion, and fit card remain None.
 ---
 
 ## Sample Run
+
+**The three tools, tested one at a time**
 
 ### Tool 1: search_listings — Independent Test
 
@@ -190,7 +215,7 @@ Nothing beats the effortless, off-duty streetwear vibe of these Vintage Levi's 5
 
 **Observation:**
 
-The tool generated a three-sentence cdoneaption mentioning the selected Levi's jeans, their $38.00 price, the Depop platform, and the outfit's streetwear vibe. Three additional runs with caching disabled produced different captions while preserving the required information. The model did not consistently preserve the platform's capitalization.
+The tool generated a three-sentence caption mentioning the selected Levi's jeans, their $38.00 price, the Depop platform, and the outfit's streetwear vibe. Three additional runs with caching disabled produced different captions while preserving the required information. The model did not consistently preserve the platform's capitalization.
 
 <!-- Two things go here.
 
@@ -199,27 +224,59 @@ The tool generated a three-sentence cdoneaption mentioning the selected Levi's j
 
 **One full query**
 
-```
-$ python app.py ask '...'
+**Command:**
 
 ```
-
-**The three tools, tested one at a time**
-
-```
-$ python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
+$ python app.py ask 'vintage graphic tee under $30, size M'
 
 ```
+**Terminal output:**
+
+```text
+[1] parse_query
+      in:  vintage graphic tee under $30, size M
+      out: dict with keys: description, size, max_price
+[2] search_listings
+      in:  dict with keys: description, size, max_price
+      out: 8 items: Y2K Baby Tee — Butterfly Print, Vintage Polo Shirt — Forest Green, Vintage Knit Vest — Argyle Brown/Cream … +5 more
+      →    8 match(es)
+[3] select_item
+      out: Y2K Baby Tee — Butterfly Print ($18.0, depop)
+[4] suggest_outfit
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Here are two complete outfit ideas combining the **Y2K Baby Tee — Butterfly Print** with your existing wardrob…
+      →    10 wardrobe item(s)
+[5] create_fit_card
+      in:  Y2K Baby Tee — Butterfly Print ($18.0, depop)
+      out: Channel your inner early 2000s icon with this Y2K Baby Tee — Butterfly Print, giving major classic Y2K streetw…
+
+  Found:    Y2K Baby Tee — Butterfly Print — $18.0 on depop
+
+  Outfit:   Here are two complete outfit ideas combining the **Y2K Baby Tee — Butterfly Print** with your existing wardrobe:
+
+### Outfit 1: Classic Y2K Streetwear
+* **Bottoms:** Baggy straight-leg jeans, dark wash
+* **Outerwear:** Vintage black denim jacket
+* **Shoes:** Chunky white sneakers
+* **Accessories:** Black crossbody bag
+
+**Why it works:** This is the ultimate early 2000s silhouette. Pairing the fitted, cropped baby tee with high-waisted, baggy dark-wash jeans creates a great proportion play (tight top, loose bottom). Tossingon the slightly cropped vintage black denim jacket and chunky white sneakers ties the streetwear vibe together effortlessly.
+
+### Outfit 2: Casual Earth-Tone Contrast
+* **Bottoms:** Wide-leg khaki trousers
+* **Outerwear:** Black cropped zip hoodie (worn open or layered over)
+* **Shoes:** Black combat boots
+* **Accessories:** Brown leather belt
+
+**Why it works:** The white, pink, and purple butterfly tee brings a soft, playful pop of color that contrasts nicely with the structured, earthy khaki trousers. Adding the black cropped zip hoodie and blackcombat boots grounds the pastels with a touch of grunge, while the brown leather belt pulls the tan trousers into the mix.
+
+Fit card: Channel your inner early 2000s icon with this Y2K Baby Tee — Butterfly Print, giving major classic Y2K streetwear vibes when paired with baggy jeans and chunky sneakers. Grab this adorable fittedcrop now on depop for just $18.00 before it's gone!
+
+2 model calls this session, 962 prompt + 331 output tokens
 
 ```
-$ python -c "from tools import suggest_outfit; ..."
-
-```
-
-```
-$ python -c "from tools import create_fit_card; ..."
-
-```
+**Observation:**
+The agent successfully parsed the query, found eight matching listings, selected a $18 item within the $30 budget, generated two outfits using the example wardrobe, and created a fit card. All five steps completed with two model calls.
 
 ---
 
@@ -232,17 +289,21 @@ $ python -c "from tools import create_fit_card; ..."
      "I gave Claude my search_listings spec. It returned None on no match
      instead of an empty list, so I changed it" is the level we want. -->
 
-**Moment 1**
+**Moment 1 — Building and testing the clothing search tool**
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- **What I asked for:** I asked ChatGPT to help me implement `search_listings()` in Python, including filtering clothing listings by description, size, and maximum price. I also wanted the tool to handle different clothing size formats correctly.
 
-**Moment 2**
+- **What came back:** ChatGPT provided implementation guidance for filtering listings, matching sizes, ranking relevant results, and returning an empty list when no items matched.
 
-- *What I asked for:*
-- *What came back:*
-- *What I changed:*
+- **What I changed:** I implemented and tested the search logic against the provided clothing dataset. I verified that letter sizes, waist sizes, and shoe sizes were handled appropriately and that an impossible search returned `[]` instead of causing an error.
+
+**Moment 2 — Connecting the tools and debugging the agent**
+
+- **What I asked for:** I asked ChatGPT to guide me through connecting `search_listings()`, `suggest_outfit()`, and `create_fit_card()` inside `agent.py`, while keeping the implementation consistent with the project's requirements.
+
+- **What came back:** ChatGPT helped me identify that `run_agent()` was calling `_search(parsed)`, which was not defined in `agent.py`. It suggested replacing that call with `search_listings()` and passing the parsed description, size, and maximum price.
+
+- **What I changed:** I updated `run_agent()` to call `search_listings()` directly, checked the Python syntax, and tested the complete agent. I verified that a successful search generated outfits and a fit card, while an unsuccessful search stopped early with a helpful message and zero model calls.
 
 <!-- ═══════════════════════ UNIT 4 — THE TEST ═══════════════════════
 
@@ -386,15 +447,15 @@ full. -->
 
      SUBMISSION CHECKLIST — unit 3
 
-       [ ] criteria.md has five numbered criteria, each with a target
-       [ ] Each criterion has a reason underneath it
-       [ ] All five unit 3 sections above have real content
-       [ ] Tool Inventory: all three tools, inputs WITH TYPES, a specific
+       [x] criteria.md has five numbered criteria, each with a target
+       [x] Each criterion has a reason underneath it
+       [x] All five unit 3 sections above have real content
+       [x] Tool Inventory: all three tools, inputs WITH TYPES, a specific
            return value, and the empty case
-       [ ] Planning Loop names the branch rule and agent.py::run_agent
-       [ ] Sample Run: one full query plus the three per-tool tests, as text
-       [ ] At least four new commits
-       [ ] Repository URL submitted — WRITE IT DOWN, you submit the same one
+       [x] Planning Loop names the branch rule and agent.py::run_agent
+       [x] Sample Run: one full query plus the three per-tool tests, as text
+       [x] At least four new commits
+       [x] Repository URL submitted — WRITE IT DOWN, you submit the same one
            next unit
 
      SUBMISSION CHECKLIST — unit 4

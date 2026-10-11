@@ -173,10 +173,17 @@ def run_agent(query: str, wardrobe: dict) -> dict:
 
         steps += 1
         trace.check_iterations(steps)
-        results = _search(parsed)
+
+        results = search_listings(
+            description=parsed["description"],
+            size=parsed.get("size"),
+            max_price=parsed.get("max_price")
+        )
+
         session["search_results"] = results
+
         trace.step(
-            "search_listings (via MCP)",
+            "search_listings",
             inputs=parsed,
             returned=results,
             note=f"{len(results)} match(es)",

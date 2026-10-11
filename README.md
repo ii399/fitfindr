@@ -59,24 +59,25 @@
 
 ### `search_listings`
 
-- **What it does:**
-- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" -->
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Searches clothing listings for items matching the user's description, optional size, and maximum price.
+- **Inputs:** <!-- name and type each: `max_price` (float), not "a price" --> 
+`description` (str), `size` (str or None), `max_price` (float or None).
+- **Returns:**  A list of matching listing dictionaries (`list[dict]`), each containing fields such as `id`, `title`, `price`, `size`, `style_tags`, and `platform`, sorted by relevance.
+- **When it has nothing:** Returns an empty list (`[]`) when no matching clothing items are found.
 
 ### `suggest_outfit`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Suggests an outfit by combining a selected clothing item with pieces from the user's existing wardrobe.
+- **Inputs:** `new_item` (dict) — the selected clothing listing; `wardrobe` (dict) — the user's wardrobe containing an `items` list.
+- **Returns:** A string (`str`) describing how to style the selected item with specific clothing pieces from the user's wardrobe.
+- **When it has nothing:** If the wardrobe is empty, returns general styling advice for the selected item instead of failing.
 
 ### `create_fit_card`
 
-- **What it does:**
-- **Inputs:**
-- **Returns:**
-- **When it has nothing:**
+- **What it does:** Generates a short, engaging fit card describing the suggested outfit and selected clothing item.
+- **Inputs:** `outfit` (str) — the outfit suggestion; `new_item` (dict) — the selected clothing listing.
+- **Returns:** A string (`str`) containing a two-to-four-sentence caption describing the outfit's style and mentioning the selected item's name, price, and platform.
+- **When it has nothing:** If the outfit suggestion is empty, returns an explanatory message instead of generating a fit card.
 
 ---
 
@@ -94,6 +95,18 @@
      function have to be real. -->
 
 **Branch rule:**
+
+If `search_listings` returns an empty list (`[]`), save a helpful
+message in `session["error"]` explaining that no listings matched
+and suggesting what the user can change, then stop without calling
+`suggest_outfit`.
+
+Otherwise, take the first listing from the search results, save it
+in `session["selected_item"]`, and pass that selected item to
+`suggest_outfit` along with the user's wardrobe. Save the outfit
+suggestion in `session["outfit_suggestion"]`, then pass it and the
+selected item to `create_fit_card`.
+
 
 **Where it lives:** `agent.py::run_agent`
 

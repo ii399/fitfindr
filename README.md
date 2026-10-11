@@ -65,6 +65,8 @@
 - **Returns:**  A list of matching listing dictionaries (`list[dict]`), each containing fields such as `id`, `title`, `price`, `size`, `style_tags`, and `platform`, sorted by relevance.
 - **When it has nothing:** Returns an empty list (`[]`) when no matching clothing items are found.
 
+**Size-matching rules:** Size matching is case-insensitive. Letter sizes (`S`, `M`, `L`, `XL`) match exact size components, including combined sizes such as `S/M` and `M/L`. Waist sizes match the first size component, so `W30` matches both `W30` and `W30 L30`. Shoe sizes require an exact match, so `US 8` does not match `US 8.5`. Parenthetical size notes are ignored when matching. One-size items are not automatically included in searches for letter sizes.
+
 ### `suggest_outfit`
 
 - **What it does:** Suggests an outfit by combining a selected clothing item with pieces from the user's existing wardrobe.
@@ -117,6 +119,78 @@ selected item to `create_fit_card`.
 ---
 
 ## Sample Run
+
+### Tool 1: search_listings — Independent Test
+
+**Command:**
+
+```powershell
+python -c "from tools import search_listings; results = search_listings('designer ballgown', size='XXS', max_price=5); print('Results:', results); print('Is empty list:', results == [])"
+```
+**Terminal output:**
+
+```text
+Results: []
+Is empty list: True
+```
+
+**Observation:**
+
+The search returned an empty list when no clothing matched the requested description, size, and budget. This confirms that the tool handles an unsuccessful search without returning an exception or `None`.
+
+### Tool 2: suggest_outfit — Independent Test
+
+**Command:**
+
+```powershell
+python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; result = suggest_outfit(load_listings()[0], get_example_wardrobe()); print(result)"
+```
+**Terminal output:**
+
+```text
+As your stylist, I definitely recommend grabbing these Vintage Levi's 501 Jeans—they are a timeless staple that will add a great relaxed, authentic texture to your closet. 
+
+Here are two complete outfits combining the new jeans with pieces you already own:
+
+### Outfit 1: Casual Streetwear
+* **Top:** White ribbed tank top
+* **Outerwear:** Vintage black denim jacket
+* **Shoes:** Chunky white sneakers
+* **Accessories:** Black crossbody bag
+
+**Why it works:** 
+The fitted white tank balances the straight-leg cut of the vintage 501s, while the slightly cropped black denim jacket creates a cool, layered denim-on-denim look. Finished with the chunky white sneakers andcrossbody bag, this is an effortless, everyday outfit with a classic streetwear edge.
+
+### Outfit 2: Cozy & Grunge-Influenced
+* **Top:** Oversized grey crewneck sweatshirt
+* **Shoes:** Black combat boots
+* **Accessories:** Brown leather belt
+
+**Why it works:** 
+Tucking the front of the oversized grey crewneck into the 501s highlights the waist while keeping that cozy, relaxed vibe. Pairing the medium wash denim with the black combat boots adds a subtle grunge contrast, and the brown leather belt pulls the whole casual look together.
+```
+
+**Observation:**
+
+The tool generated two outfit suggestions using the selected Levi's jeans and named specific items from the example wardrobe. It also explained why each combination works.
+
+### Tool 3: create_fit_card — Independent Test
+
+**Command:**
+
+```powershell
+python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
+```
+
+**Terminal output:**
+
+```text
+Nothing beats the effortless, off-duty streetwear vibe of these Vintage Levi's 501 Jeans — Medium Wash with their perfectly worn-in knees. Just style them with your favorite crisp white sneakers for that timeless, everyday look. Grab this classic pair now on depop for $38.00 before someone else does! #vintage #classic #denim #streetwear
+```
+
+**Observation:**
+
+The tool generated a three-sentence cdoneaption mentioning the selected Levi's jeans, their $38.00 price, the Depop platform, and the outfit's streetwear vibe. Three additional runs with caching disabled produced different captions while preserving the required information. The model did not consistently preserve the platform's capitalization.
 
 <!-- Two things go here.
 

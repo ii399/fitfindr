@@ -78,8 +78,86 @@ def search_listings(
     Test it from a terminal before you move on:
         python -c "from tools import search_listings; print(search_listings('graphic tee', max_price=30))"
     """
-    # TODO: replace this with your implementation
-    return []
+   # Step 1: Load all available clothing listings
+    listings = load_listings()
+
+    # Step 2a: Filter by maximum price, if provided
+    if max_price is not None:
+        listings = [
+            item for item in listings
+            if item["price"] <= max_price
+        ]
+
+    # Step 2b: Filter by size, if provided
+    if size is not None:
+        requested_size = size.strip().upper()
+
+        filtered = []
+
+        for item in listings:
+            listing_size = item["size"].upper()
+
+            # Remove parenthetical notes, such as "(oversized)"
+            listing_size = listing_size.split("(")[0].strip()
+
+            if requested_size in {"S", "M", "L", "XL"}:
+                # Match complete size components, not substrings
+                size_options = [
+                    part.strip()
+                    for part in listing_size.split("/")
+                ]
+
+                if requested_size in size_options:
+                    filtered.append(item)
+
+            elif requested_size.startswith("W"):
+                # Match waist size, e.g. W30 or W30 L30
+                if requested_size == listing_size.split()[0]:
+                    filtered.append(item)
+
+            else:
+                # Exact match for shoe sizes and other formats
+                if requested_size == listing_size:
+                    filtered.append(item)
+
+        listings = filtered
+
+    # Step 3: Score listings by keyword overlap
+    keywords = description.lower().split()
+
+    scored_listings = []
+
+    for item in listings:
+        searchable_text = " ".join([
+            item["title"],
+            item["description"],
+            item["category"],
+            " ".join(item["style_tags"]),
+            " ".join(item["colors"]),
+            item["brand"] or ""
+        ]).lower()
+
+       # Give title matches more importance
+        title_words = item["title"].lower().split()
+        all_words = searchable_text.split()
+
+        score = sum(
+            3 if keyword in title_words
+            else 1 if keyword in all_words
+            else 0
+            for keyword in keywords
+        )
+
+        # Step 4: Exclude listings with no keyword matches
+        if score > 0:
+            scored_listings.append((score, item))
+
+        # Sort by relevance, highest score first
+        scored_listings.sort(key=lambda result: result[0], reverse=True)
+
+    return [
+        item for score, item in scored_listings[:config.SEARCH_RESULT_LIMIT]
+    ]
 
 
 # ── Tool 2: suggest_outfit ────────────────────────────────────────────────────
@@ -112,8 +190,73 @@ def suggest_outfit(new_item: dict, wardrobe: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import suggest_outfit; from utils.data_loader import get_example_wardrobe, load_listings; print(suggest_outfit(load_listings()[0], get_example_wardrobe()))"
     """
-    # TODO: replace this with your implementation
-    return ""
+
+    # Step 1: Get the wardrobe items
+    wardrobe_items = wardrobe.get("items", [])
+
+    # Step 2: Check whether the wardrobe is empty
+    if not wardrobe_items:
+        prompt = f"""
+        You are a helpful fashion stylist.
+
+        A user is considering buying this thrifted item:
+        Name: {new_item['title']}
+        Description: {new_item['description']}
+        Color: {', '.join(new_item['colors'])}
+        Style: {', '.join(new_item['style_tags'])}
+
+        The user has not provided any wardrobe items.
+
+        Suggest one or two ways to style this item using general
+        clothing recommendations.
+
+        Do not claim the user already owns any suggested clothing.
+        Keep your suggestions practical, clear, and concise.
+        """
+
+        return generate(prompt)
+
+    # Step 3: Format the user's wardrobe items
+    wardrobe_lines = []
+
+    for item in wardrobe_items:
+        item_description = (
+            f"- {item['name']} "
+            f"(Category: {item['category']}, "
+            f"Colors: {', '.join(item['colors'])}, "
+            f"Styles: {', '.join(item['style_tags'])})"
+        )
+
+        if item.get("notes"):
+            item_description += f" Notes: {item['notes']}"
+
+        wardrobe_lines.append(item_description)
+
+    wardrobe_text = "\n".join(wardrobe_lines)
+
+    # Step 4: Ask the AI model for outfit suggestions
+    prompt = f"""
+    You are a helpful fashion stylist.
+
+    The user is considering buying this thrifted item:
+    Name: {new_item['title']}
+    Description: {new_item['description']}
+    Colors: {', '.join(new_item['colors'])}
+    Styles: {', '.join(new_item['style_tags'])}
+
+    The user already owns these wardrobe items:
+    {wardrobe_text}
+
+    Suggest one or two complete outfits combining the new item
+    with specific pieces from the user's existing wardrobe.
+
+    Use the exact names of wardrobe pieces where possible.
+    Do not invent items that are not in the wardrobe.
+    Explain briefly why the combinations work.
+    Keep your response practical and concise.
+    """
+
+    return generate(prompt)
 
 
 # ── Tool 3: create_fit_card ───────────────────────────────────────────────────
@@ -152,5 +295,38 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
     Test it from a terminal before you move on:
         python -c "from tools import create_fit_card; from utils.data_loader import load_listings; print(create_fit_card('jeans and white sneakers', load_listings()[0]))"
     """
-    # TODO: replace this with your implementation
-    return ""
+
+   # Step 1: Handle an empty or whitespace-only outfit
+    if not outfit or not outfit.strip():
+        return "A fit card cannot be created because no outfit suggestion was provided."
+
+    # Step 2: Build the AI prompt
+    prompt = f"""
+    You are creating a short, engaging social media caption
+    for a thrifted fashion find.
+
+    Selected item:
+    Name: {new_item['title']}
+    Price: ${float(new_item['price']):.2f}
+    Platform: {new_item['platform']}
+    Description: {new_item['description']}
+    Style tags: {', '.join(new_item['style_tags'])}
+
+    Outfit suggestion:
+    {outfit}
+
+    Write a caption that:
+    1. Contains 2 to 4 sentences.
+    2. Mentions the item's exact name once.
+    3. Mentions its price once.
+    4. Mentions the selling platform once.
+    5. Describes the outfit's specific style or vibe.
+    6. Sounds like a real social media post, not a product description.
+    7. Display the price exactly as provided, including two decimal places.
+    8. Preserve the selling platform's capitalization exactly as provided.
+    
+    Return only the caption.
+    """
+
+    # Step 3: Generate and return the caption
+    return generate(prompt)

@@ -330,3 +330,43 @@ def create_fit_card(outfit: str, new_item: dict) -> str:
 
     # Step 3: Generate and return the caption
     return generate(prompt)
+
+# ── Tool 4: compare_prices ───────────────────────────────────────────────────
+def compare_prices(listings: list[dict]) -> dict:
+    """
+    Compare prices among clothing listings.
+
+    Returns the cheapest item, most expensive item,
+    and the difference between their prices.
+    """
+
+    # Handle an empty list
+    if not listings:
+        return {
+            "lowest_price": None,
+            "highest_price": None,
+            "cheapest_item": None,
+            "most_expensive_item": None,
+            "price_difference": 0.0
+        }
+
+    # Sort listings from lowest to highest price
+    sorted_listings = sorted(
+        listings,
+        key=lambda item: item["price"]
+    )
+
+    # Get the cheapest and most expensive items
+    cheapest = sorted_listings[0]
+    most_expensive = sorted_listings[-1]
+
+    # Calculate the price difference
+    difference = most_expensive["price"] - cheapest["price"]
+
+    return {
+        "lowest_price": cheapest["price"],
+        "highest_price": most_expensive["price"],
+        "cheapest_item": cheapest,
+        "most_expensive_item": most_expensive,
+        "price_difference": round(difference, 2)
+    }
